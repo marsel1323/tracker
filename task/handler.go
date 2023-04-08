@@ -2,55 +2,87 @@ package task
 
 import (
 	"encoding/json"
+	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"log"
 	"net/http"
 )
 
-func Handler(taskRepo *TaskRepository, c *gin.Context) {
-	switch c.Request.Method {
-	case http.MethodGet:
+var ErrTaskNotFound = errors.New("task not found")
+
+func RegisterRoutes(taskRepo *MongoTaskRepository, router *gin.Engine) {
+	router.GET("/tasks", func(c *gin.Context) {
 		handleGetAllTasks(taskRepo, c)
-	case http.MethodPost:
+	})
+
+	router.POST("/tasks", func(c *gin.Context) {
 		handleCreateTask(taskRepo, c)
-	default:
-		c.JSON(http.StatusMethodNotAllowed, gin.H{"error": "Method not allowed"})
-	}
+	})
+
+	router.PUT("/tasks/:id", func(c *gin.Context) {
+		handleUpdateTask(taskRepo, c)
+	})
 }
 
-func handleGetAllTasks(taskRepo *TaskRepository, c *gin.Context) {
-	tasks, err := taskRepo.GetAllTasks()
+func handleGetAllTasks(taskRepo *MongoTaskRepository, c *gin.Context) {
+	tasks, err := taskRepo.GetAllTasks(c.Request.Context())
 	if err != nil {
-		//http.Error(w, "Internal server error", http.StatusInternalServerError)
+		log.Printf("Error fetching tasks: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
-	//w.Header().Set("Content-Type", "application/json")
-	//json.NewEncoder(w).Encode(tasks)
-
 	c.JSON(http.StatusOK, tasks)
 }
 
-func handleCreateTask(repo *TaskRepository, c *gin.Context) {
+func handleCreateTask(repo *MongoTaskRepository, c *gin.Context) {
 	var newTask Task
 	err := json.NewDecoder(c.Request.Body).Decode(&newTask)
 	if err != nil {
-		//http.Error(w, "Invalid request body", http.StatusBadRequest)
+		log.Printf("Error decoding request body: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 	newTask.ID = uuid.New().String()
 
-	err = repo.CreateTask(&newTask)
+	err = repo.CreateTask(c.Request.Context(), &newTask)
 	if err != nil {
-		//http.Error(w, "Internal server error", http.StatusInternalServerError)
+		log.Printf("Error creating task: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
-	//w.Header().Set("Content-Type", "application/json")
-	//w.WriteHeader(http.StatusCreated)
-	//json.NewEncoder(w).Encode(newTask)
 	c.JSON(http.StatusCreated, newTask)
+}
+
+func handleUpdateTask(repo *MongoTaskRepository, c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing id URL parameter"})
+		return
+	}
+
+	var updatedTask Task
+	err := json.NewDecoder(c.Request.Body).Decode(&updatedTask)
+	if err != nil {
+		log.Printf("Error decoding request body: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	updatedTask.ID = id
+	err = repo.UpdateTask(c.Request.Context(), id, &updatedTask)
+	if err != nil {
+		if err == ErrTaskNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
+			return
+		}
+
+		log.Printf("Error updating task: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, updatedTask)
 }

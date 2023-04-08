@@ -24,13 +24,7 @@ func main() {
 
 	router := gin.Default()
 
-	router.GET("/tasks", func(c *gin.Context) {
-		task.Handler(taskRepo, c)
-	})
-
-	router.POST("/tasks", func(c *gin.Context) {
-		task.Handler(taskRepo, c)
-	})
+	task.RegisterRoutes(taskRepo, router)
 
 	log.Println("Listening on :8080...")
 	err = router.Run(":" + os.Getenv("PORT"))

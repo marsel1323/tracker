@@ -62,7 +62,7 @@ func TestFindAll(t *testing.T) {
 
 	repo := NewTaskRepository(collection)
 
-	tasks, err := repo.GetAllTasks()
+	tasks, err := repo.GetAllTasks(context.Background())
 	if err != nil {
 		t.Fatalf("Failed to call FindAll: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestCreateTask(t *testing.T) {
 		Name: "Task 4",
 	}
 
-	err := repo.CreateTask(&newTask)
+	err := repo.CreateTask(context.Background(), &newTask)
 	if err != nil {
 		t.Fatalf("Failed to create task: %v", err)
 	}
@@ -99,5 +99,55 @@ func TestCreateTask(t *testing.T) {
 
 	if foundTask.ID != newTask.ID || foundTask.Name != newTask.Name {
 		t.Errorf("Task not created correclty: expected %v, got %v", newTask, foundTask)
+	}
+}
+
+func TestUpdateTask(t *testing.T) {
+	client, collection := setupTestDB(t)
+	defer client.Disconnect(context.Background())
+
+	// Clean up the test collection
+	collection.Drop(context.Background())
+
+	repo := NewTaskRepository(collection)
+
+	// Create a task first
+	newTask := Task{
+		ID:   uuid.New().String(),
+		Name: "Task to be updated",
+	}
+	err := repo.CreateTask(context.Background(), &newTask)
+	if err != nil {
+		t.Fatalf("Failed to create task: %v", err)
+	}
+
+	// Prepare the updated task
+	updatedTask := Task{
+		Name:      "Updated task",
+		Completed: true,
+	}
+
+	// Update the task
+	err = repo.UpdateTask(context.Background(), newTask.ID, &updatedTask)
+	if err != nil {
+		t.Fatalf("Failed to update task: %v", err)
+	}
+
+	// Find the updated task
+	var foundTask bson.M
+	err = collection.FindOne(context.Background(), bson.M{"_id": newTask.ID}).Decode(&foundTask)
+	if err != nil {
+		t.Fatalf("Failed to find updated task: %v", err)
+	}
+
+	// Check the updated fields
+	if newTask.ID != foundTask["_id"].(string) {
+		t.Errorf("Task ID not updated correctly: expected %v, fot %v", newTask.ID, foundTask["_id"].(string))
+	}
+	if updatedTask.Name != foundTask["name"].(string) {
+		t.Errorf("Task name not updated correctly: expected %v, got %v", updatedTask.Name, foundTask["name"].(string))
+	}
+	if updatedTask.Completed != foundTask["completed"].(bool) {
+		t.Errorf("Task completion status not updated correctly: expected %v, got %v", updatedTask.Completed, foundTask["completed"].(bool))
 	}
 }
