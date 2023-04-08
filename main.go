@@ -17,12 +17,12 @@ func main() {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
 
-	router := gin.Default()
-
 	client, collection := connectToDB()
 	defer client.Disconnect(context.Background())
 
 	taskRepo := task.NewTaskRepository(collection)
+
+	router := gin.Default()
 
 	router.GET("/tasks", func(c *gin.Context) {
 		task.Handler(taskRepo, c)
@@ -35,7 +35,7 @@ func main() {
 	log.Println("Listening on :8080...")
 	err = router.Run(":" + os.Getenv("PORT"))
 	if err != nil {
-		log.Fatal("ListenAndServe:", err)
+		log.Fatalf("Failed to start server: %v", err)
 	}
 }
 
@@ -45,13 +45,12 @@ func connectToDB() (*mongo.Client, *mongo.Collection) {
 
 	client, err := mongo.Connect(context.Background(), clientOptions)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Failed to connect to MongoDB: %v", err)
 	}
 
-	// Check the connection
 	err = client.Ping(context.Background(), nil)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Failed to ping MongoDB: %v", err)
 	}
 
 	collection := client.Database("task").Collection("tasks")
