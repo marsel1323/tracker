@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -31,22 +33,25 @@ type testHandler struct {
 	taskRepo *TaskRepository
 }
 
-func (h *testHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	Handler(h.taskRepo, w, r)
+func (h *testHandler) ServeHTTP(c *gin.Context) {
+	Handler(h.taskRepo, c)
+}
+
+func performRequest(handler testHandler, method, url string, requestBody io.Reader) *httptest.ResponseRecorder {
+	router := gin.Default()
+	router.Handle(method, url, handler.ServeHTTP)
+	req := httptest.NewRequest(method, url, requestBody)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	return resp
 }
 
 func TestHandleGetAllTasks(t *testing.T) {
 	client, taskRepo := setupHandler(t)
 	defer tearDownHandler(t, client, taskRepo)
 
-	req, err := http.NewRequest("GET", "/tasks", nil)
-	if err != nil {
-		t.Fatalf("Failed to create request: %v", err)
-	}
-
-	rr := httptest.NewRecorder()
-	handler := &testHandler{taskRepo: taskRepo}
-	handler.ServeHTTP(rr, req)
+	handler := testHandler{taskRepo: taskRepo}
+	rr := performRequest(handler, "GET", "/tasks", nil)
 
 	if status := rr.Code; status != http.StatusOK {
 		t.Errorf("Handler returned wrong status code: got %v want %v", status, http.StatusOK)
@@ -59,7 +64,7 @@ func TestHandleGetAllTasks(t *testing.T) {
 	}
 
 	var tasks []Task
-	err = json.Unmarshal(rr.Body.Bytes(), &tasks)
+	err := json.Unmarshal(rr.Body.Bytes(), &tasks)
 	if err != nil {
 		t.Fatalf("Failed to unmarshal response: %v", err)
 	}
@@ -82,15 +87,8 @@ func TestHandleCreateTask(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req, err := http.NewRequest("POST", "/tasks", bytes.NewBuffer(jsonTask))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rr := httptest.NewRecorder()
-	handler := &testHandler{taskRepo: taskRepo}
-
-	handler.ServeHTTP(rr, req)
+	handler := testHandler{taskRepo: taskRepo}
+	rr := performRequest(handler, "POST", "/tasks", bytes.NewReader(jsonTask))
 
 	if status := rr.Code; status != http.StatusCreated {
 		t.Errorf("Handler returned wrong status code: got %v want %v", status, http.StatusCreated)
