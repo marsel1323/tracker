@@ -3,13 +3,20 @@ package main
 import (
 	"context"
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
+	"os"
 	"tracker/task"
 )
 
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatalf("Error loading .env file: %v", err)
+	}
+
 	router := gin.Default()
 
 	client, collection := connectToDB()
@@ -18,15 +25,15 @@ func main() {
 	taskRepo := task.NewTaskRepository(collection)
 
 	router.GET("/tasks", func(c *gin.Context) {
-		task.Handler(taskRepo, c.Writer, c.Request)
+		task.Handler(taskRepo, c)
 	})
 
 	router.POST("/tasks", func(c *gin.Context) {
-		task.Handler(taskRepo, c.Writer, c.Request)
+		task.Handler(taskRepo, c)
 	})
 
 	log.Println("Listening on :8080...")
-	err := router.Run(":8080")
+	err = router.Run(":" + os.Getenv("PORT"))
 	if err != nil {
 		log.Fatal("ListenAndServe:", err)
 	}
